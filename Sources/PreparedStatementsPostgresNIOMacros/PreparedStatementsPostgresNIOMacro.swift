@@ -5,6 +5,9 @@ import SwiftSyntaxMacros
 import Utility
 
 public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
+    private typealias Column = (name: String, type: TokenSyntax, alias: String?)
+    private typealias Bind = (name: String, type: TokenSyntax)
+
     public static func expansion(
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
@@ -23,25 +26,26 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
     }
 
     public static func expansion(of node: AttributeSyntax, providingMembersOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
-        guard let elements = node.arguments?.as(LabeledExprListSyntax.self)?
-            .first?.expression.as(StringLiteralExprSyntax.self)?.segments else {
-            // TODO: Be more specific about this error
-//            context.diagnose(Diagnostic(node: Syntax(node), message: PostgresNIODiagnostic.wrongArgument))
-            return []
-        }
+        // It is fine to force unwrap here, because the compiler ensures we receive this exact syntax tree here.
+        let elements = node
+            .arguments!.as(LabeledExprListSyntax.self)!
+            .first!.expression.as(StringLiteralExprSyntax.self)!.segments
 
         var sql = ""
-        var columns: [(String, TokenSyntax)] = []
-        var binds: [(String, TokenSyntax)] = []
+        var columns: [Column] = []
+        var binds: [Bind] = []
         for element in elements {
             if let expression = element.as(ExpressionSegmentSyntax.self) {
                 let interpolation = extractInterpolations(expression)
                 switch interpolation {
-                case .column(let name, let type):
-                    columns.append((name, type))
-                    sql.append(name)
-                case .bind(let name, let type):
-                    binds.append((name, type))
+                case .column(let column):
+                    columns.append(column)
+                    sql.append(column.name)
+                    if let alias = column.alias {
+                        sql.append(" AS \(alias)")
+                    }
+                case .bind(let bind):
+                    binds.append(bind)
                     sql.append("$\(binds.count)")
                 }
             } else if let expression = element.as(StringSegmentSyntax.self) {
@@ -53,14 +57,14 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
             structKeyword: .keyword(.struct, trailingTrivia: .space),
             name: .identifier("Row", trailingTrivia: .space),
             memberBlockBuilder: {
-                for (name, type) in columns {
+                for (name, type, alias) in columns {
                     MemberBlockItemSyntax(
                         decl: VariableDeclSyntax(
                             bindingSpecifier: .keyword(.let, trailingTrivia: .space),
                             bindings: PatternBindingListSyntax(
                                 itemsBuilder: {
                                     PatternBindingSyntax(
-                                        pattern: IdentifierPatternSyntax(identifier: .identifier(name)),
+                                        pattern: IdentifierPatternSyntax(identifier: .identifier(alias ?? name)),
                                         typeAnnotation: TypeAnnotationSyntax(type: IdentifierTypeSyntax(name: type))
                                     )
                                 }
@@ -108,42 +112,35 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
         ]
     }
 
-    enum Interpolation {
-        case column(String, TokenSyntax)
-        case bind(String, TokenSyntax)
+    private enum Interpolation {
+        case column(Column)
+        case bind(Bind)
     }
     private static func extractInterpolations(_ node: ExpressionSegmentSyntax) -> Interpolation {
         let tupleElements = node.expressions
-        guard tupleElements.count == 2 else {
-            fatalError("Expected tuple with exactly two elements")
-        }
+        precondition(tupleElements.count >= 2, "Expected tuple with two or more elements, less are impossible as the compiler already checks for it")
 
         // First element needs to be the column name
         var iterator = tupleElements.makeIterator()
-        let identifier = iterator.next()! as LabeledExprSyntax // works as tuple contains exactly two elements
-        guard let type = iterator.next()!.expression.as(MemberAccessExprSyntax.self)?.base?.as(DeclReferenceExprSyntax.self) else {
-            fatalError("expected something")
-        }
+        let identifier = iterator.next()! as LabeledExprSyntax // works as tuple contains at least two elements
+        // Type can be force-unwrapped as the compiler ensures it is there.
+        let type = iterator.next()!.expression.as(MemberAccessExprSyntax.self)!
+            .base!.as(DeclReferenceExprSyntax.self)!
+        // Same thing as with type.
+        let name = identifier.expression.as(StringLiteralExprSyntax.self)!
+            .segments.first!.as(StringSegmentSyntax.self)!.content.text
         switch identifier.label?.identifier?.name {
         case "bind":
-            guard let columnName = identifier.expression.as(StringLiteralExprSyntax.self)?
-                .segments.first?.as(StringSegmentSyntax.self)?.content
-                .text else {
-                fatalError("Expected column name")
-            }
-            return .bind(columnName, type.baseName)
+            return .bind((name: name, type: type.baseName))
         default:
-            guard let columnName = identifier.expression.as(StringLiteralExprSyntax.self)?
-                .segments.first?.as(StringSegmentSyntax.self)?.content
-                .text else {
-                fatalError("Expected column name")
-            }
+            let alias = iterator.next()?.expression.as(StringLiteralExprSyntax.self)?
+                .segments.first?.as(StringSegmentSyntax.self)?.content.text
 
-            return .column(columnName, type.baseName)
+            return .column((name: name, type: type.baseName, alias: alias))
         }
     }
 
-    private static func makeBindings(for binds: [(String, TokenSyntax)]) -> FunctionDeclSyntax {
+    private static func makeBindings(for binds: [Bind]) -> FunctionDeclSyntax {
         FunctionDeclSyntax(
             name: .identifier("makeBindings"),
             signature: FunctionSignatureSyntax(
@@ -218,7 +215,7 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
         )
     }
 
-    private static func decodeRow(from columns: [(String, TokenSyntax)]) -> FunctionDeclSyntax {
+    private static func decodeRow(from columns: [Column]) -> FunctionDeclSyntax {
         FunctionDeclSyntax(
             name: .identifier("decodeRow"),
             signature: FunctionSignatureSyntax(
@@ -240,8 +237,8 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
                             bindings: [
                                 PatternBindingSyntax(
                                     pattern: TuplePatternSyntax(elementsBuilder: {
-                                        for (column, _) in columns {
-                                            TuplePatternElementSyntax(pattern: IdentifierPatternSyntax(identifier: .identifier(column)))
+                                        for (column, _, alias) in columns {
+                                            TuplePatternElementSyntax(pattern: IdentifierPatternSyntax(identifier: .identifier(alias ?? column)))
                                         }
                                     }),
                                     initializer: InitializerClauseSyntax(
@@ -256,7 +253,7 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
                                                 argumentsBuilder: {
                                                     LabeledExprSyntax(expression: MemberAccessExprSyntax(
                                                         base: TupleExprSyntax(elementsBuilder: {
-                                                            for (_, column) in columns {
+                                                            for (_, column, _) in columns {
                                                                 LabeledExprSyntax(expression: DeclReferenceExprSyntax(baseName: column))
                                                             }
                                                         }),
@@ -276,8 +273,11 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
                     leftParen: .leftParenToken(),
                     rightParen: .rightParenToken(),
                     argumentsBuilder: {
-                        for (column, _) in columns {
-                            LabeledExprSyntax(label: column, expression: DeclReferenceExprSyntax(baseName: .identifier(column)))
+                        for (column, _, alias) in columns {
+                            LabeledExprSyntax(
+                                label: alias ?? column,
+                                expression: DeclReferenceExprSyntax(baseName: .identifier(alias ?? column))
+                            )
                         }
                     }
                 )))))

@@ -142,4 +142,114 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
         throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
+
+    func testMacroWithAliasInColumn() throws {
+        #if canImport(PreparedStatementsPostgresNIOMacros)
+        assertMacroExpansion(
+            #"""
+            @Statement("SELECT \("user_id", UUID.self, as: "userID"), \("name", String.self), \("age", Int.self) FROM users WHERE \(bind: "age", Int.self) > age")
+            struct MyStatement {}
+            """#,
+            expandedSource: """
+            struct MyStatement {
+            
+                struct Row {
+                    let userID: UUID
+                    let name: String
+                    let age: Int
+                }
+            
+                static let sql = "SELECT user_id AS userID, name, age FROM users WHERE $1 > age"
+            
+                let age: Int
+            
+                func makeBindings() throws -> PostgresBindings {
+                    var bindings = PostgresBindings(capacity: 1)
+                    bindings.append(age)
+                    return bindings
+                }
+            
+                func decodeRow(_ row: PostgresRow) throws -> Row {
+                    let (userID, name, age) = try row.decode((UUID, String, Int).self)
+                    return Row(userID: userID, name: name, age: age)
+                }
+            }
+            
+            extension MyStatement: PostgresPreparedStatement {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
+
+    func testMacroWithoutAnything() throws {
+        #if canImport(PreparedStatementsPostgresNIOMacros)
+        assertMacroExpansion(
+            #"""
+            @Statement("SELECT id, name, age FROM users")
+            struct MyStatement {}
+            """#,
+            expandedSource: """
+            struct MyStatement {
+            
+                struct Row {
+                }
+            
+                static let sql = "SELECT id, name, age FROM users"
+            
+                func makeBindings() throws -> PostgresBindings {
+                    return PostgresBindings()
+                }
+            
+                func decodeRow(_ row: PostgresRow) throws -> Row {
+                    return Row()
+                }
+            }
+            
+            extension MyStatement: PostgresPreparedStatement {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
+
+    func testMacroWithEmptyString() throws {
+        #if canImport(PreparedStatementsPostgresNIOMacros)
+        assertMacroExpansion(
+            #"""
+            @Statement("")
+            struct MyStatement {}
+            """#,
+            expandedSource: """
+            struct MyStatement {
+            
+                struct Row {
+                }
+            
+                static let sql = ""
+            
+                func makeBindings() throws -> PostgresBindings {
+                    return PostgresBindings()
+                }
+            
+                func decodeRow(_ row: PostgresRow) throws -> Row {
+                    return Row()
+                }
+            }
+            
+            extension MyStatement: PostgresPreparedStatement {
+            }
+            """,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
 }

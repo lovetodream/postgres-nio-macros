@@ -28,6 +28,9 @@ struct MyPreparedStatementOldWay: PostgresPreparedStatement {
     }
 }
 
+@Statement("")
+struct MyOtherPreparedStatement {}
+
 @available(macOS 14.0, *)
 @Observable
 final class MyObservable {}

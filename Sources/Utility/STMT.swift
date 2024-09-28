@@ -7,51 +7,52 @@
 
 import PostgresNIO
 
+/// A parsable String literal for the `@Statement` macro. It doesn't store anything and is completely useless outside of the `@Statement` declaration.
+///
+/// ```swift
+/// @Statement("SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self) FROM users")
+/// struct UsersStatement {}
+/// ```
 public struct _PostgresPreparedStatement: ExpressibleByStringInterpolation {
-    public let sql: String
-    let columns: [(name: String, type: String)]
-    let binds: [(name: String, type: String)]
+    public init(stringLiteral value: String) {}
 
-    public init(stringLiteral value: String) {
-        sql = value
-        columns = []
-        binds = []
-    }
-
-    public init(stringInterpolation: StringInterpolation) {
-        self.sql = stringInterpolation.sql
-        self.columns = stringInterpolation.columns
-        self.binds = stringInterpolation.binds
-    }
+    public init(stringInterpolation: StringInterpolation) {}
 
     public struct StringInterpolation: StringInterpolationProtocol {
         public typealias StringLiteralType = String
 
-        var sql: String
-        var columns: [(name: String, type: String)]
-        var binds: [(name: String, type: String)]
+        public init(literalCapacity: Int, interpolationCount: Int) {}
 
-        public init(literalCapacity: Int, interpolationCount: Int) {
-            sql = ""
-            sql.reserveCapacity(literalCapacity)
-            columns = []
-            columns.reserveCapacity(interpolationCount)
-            binds = []
-            binds.reserveCapacity(interpolationCount)
-        }
+        public mutating func appendLiteral(_ literal: String) {}
 
-        public mutating func appendLiteral(_ literal: String) {
-            sql.append(literal)
-        }
+        /// Adds a column, e.g. inside a `SELECT` statement.
+        /// - Parameters:
+        ///   - name: The column name in SQL.
+        ///   - type: The type used to represent the column data in Swift.
+        ///   - as: An optional alias for the column. It will be used in as an alias in SQL and the declaration Swifts `Row` struct.
+        ///
+        /// ```swift
+        ///"SELECT \("id", UUID.self) FROM users"
+        ///// SQL:   SELECT id FROM users
+        ///// Swift: struct Row { let id: UUID }
+        ///
+        ///"SELECT \("user_id", UUID.self, as: userID) FROM users"
+        ///// SQL: SELECT id as userID FROM users
+        ///// SWIFT: struct Row { let userID: UUID }
+        /// ```
+        public mutating func appendInterpolation(
+            _ name: String,
+            _ type: (some PostgresDecodable).Type,
+            as: String? = nil
+        ) {}
 
-        public mutating func appendInterpolation<T: PostgresDecodable>(_ name: String, _ type: T.Type) {
-            sql.append(name)
-            columns.append((name, String(reflecting: type)))
-        }
-
-        public mutating func appendInterpolation<T: PostgresDynamicTypeEncodable>(bind: String, _ type: T.Type) {
-            binds.append((bind, String(reflecting: type)))
-            sql.append("$\(binds.count)")
-        }
+        /// Adds a bind variable.
+        /// - Parameters:
+        ///   - bind: The name of the bind variable in Swift.
+        ///   - type: The Swift type of the bind variable.
+        public mutating func appendInterpolation(
+            bind: String,
+            _ type: (some PostgresDynamicTypeEncodable).Type
+        ) {}
     }
 }
