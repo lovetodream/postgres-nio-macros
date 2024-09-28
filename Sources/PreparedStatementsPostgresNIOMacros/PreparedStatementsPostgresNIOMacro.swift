@@ -1,8 +1,20 @@
 import SwiftCompilerPlugin
+import SwiftDiagnostics
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import Utility
+
+private struct InvalidDeclaration: DiagnosticMessage {
+    let message = "'@Statement' can only be applied to struct types"
+    let diagnosticID = MessageID(domain: "PostgresNIO", id: "statement-invalid-declaration")
+    let severity: DiagnosticSeverity = .error
+}
+private struct InvalidDeclarationFixIt: FixItMessage {
+    var introducer: TokenSyntax
+    var message: String { "Replace '\(introducer.text)' with 'struct'" }
+    let fixItID = MessageID(domain: "PostgresNIO", id: "statement-invalid-declaration-fix-it")
+}
 
 public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
     private typealias Column = (name: String, type: TokenSyntax, alias: String?)
@@ -15,6 +27,9 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
+        guard declaration.is(StructDeclSyntax.self) else {
+            return []
+        }
         let protocols = protocols.map { InheritedTypeSyntax(type: $0) }
         return [
             ExtensionDeclSyntax(
@@ -26,6 +41,20 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
     }
 
     public static func expansion(of node: AttributeSyntax, providingMembersOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
+        guard declaration.is(StructDeclSyntax.self) else {
+            context.diagnose(Diagnostic(
+                node: node,
+                message: InvalidDeclaration(),
+                fixIt: FixIt(message: InvalidDeclarationFixIt(introducer: declaration.introducer), changes: [
+                    FixIt.Change.replace(
+                        oldNode: Syntax(declaration.introducer),
+                        newNode: Syntax(TokenSyntax.keyword(.struct))
+                    )
+                ])
+            ))
+            return []
+        }
+
         // It is fine to force unwrap here, because the compiler ensures we receive this exact syntax tree here.
         let elements = node
             .arguments!.as(LabeledExprListSyntax.self)!
@@ -53,28 +82,14 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
             }
         }
 
-        let rowStruct = StructDeclSyntax(
-            structKeyword: .keyword(.struct, trailingTrivia: .space),
-            name: .identifier("Row", trailingTrivia: .space),
-            memberBlockBuilder: {
-                for (name, type, alias) in columns {
-                    MemberBlockItemSyntax(
-                        decl: VariableDeclSyntax(
-                            bindingSpecifier: .keyword(.let, trailingTrivia: .space),
-                            bindings: PatternBindingListSyntax(
-                                itemsBuilder: {
-                                    PatternBindingSyntax(
-                                        pattern: IdentifierPatternSyntax(identifier: .identifier(alias ?? name)),
-                                        typeAnnotation: TypeAnnotationSyntax(type: IdentifierTypeSyntax(name: type))
-                                    )
-                                }
-                            )
-                        )
-                    )
-                }
-            },
-            trailingTrivia: Trivia.newline
-        )
+        let rowDeclaration: DeclSyntax
+        if columns.isEmpty {
+            let rowAlias = TypeAliasDeclSyntax(name: .identifier("Row"), initializer: TypeInitializerClauseSyntax(value: IdentifierTypeSyntax(name: .identifier("Void"))))
+            rowDeclaration = DeclSyntax(rowAlias)
+        } else {
+            let rowStruct = makeRowStruct(for: columns)
+            rowDeclaration = DeclSyntax(rowStruct)
+        }
 
         let staticSQL = VariableDeclSyntax(
             modifiers: [DeclModifierSyntax(name: .keyword(.static))],
@@ -104,7 +119,7 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
         let decodeRow = decodeRow(from: columns)
 
         return [
-            DeclSyntax(rowStruct),
+            rowDeclaration,
             DeclSyntax(staticSQL),
         ] + bindings.map(DeclSyntax.init) + [
             DeclSyntax(makeBindings),
@@ -138,6 +153,31 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
 
             return .column((name: name, type: type.baseName, alias: alias))
         }
+    }
+
+    private static func makeRowStruct(for columns: [Column]) -> StructDeclSyntax {
+        StructDeclSyntax(
+            structKeyword: .keyword(.struct, trailingTrivia: .space),
+            name: .identifier("Row", trailingTrivia: .space),
+            memberBlockBuilder: {
+                for (name, type, alias) in columns {
+                    MemberBlockItemSyntax(
+                        decl: VariableDeclSyntax(
+                            bindingSpecifier: .keyword(.let, trailingTrivia: .space),
+                            bindings: PatternBindingListSyntax(
+                                itemsBuilder: {
+                                    PatternBindingSyntax(
+                                        pattern: IdentifierPatternSyntax(identifier: .identifier(alias ?? name)),
+                                        typeAnnotation: TypeAnnotationSyntax(type: IdentifierTypeSyntax(name: type))
+                                    )
+                                }
+                            )
+                        )
+                    )
+                }
+            },
+            trailingTrivia: Trivia.newline
+        )
     }
 
     private static func makeBindings(for binds: [Bind]) -> FunctionDeclSyntax {
@@ -226,7 +266,9 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
                         type: TypeSyntax(stringLiteral: "PostgresRow")
                     )
                 ]),
-                effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))),
+                effectSpecifiers: FunctionEffectSpecifiersSyntax(
+                    throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))
+                ),
                 returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "Row"))
             ),
             body: CodeBlockSyntax(statementsBuilder: {
@@ -267,20 +309,20 @@ public struct PreparedStatementsPostgresNIOMacro: ExtensionMacro, MemberMacro {
                             ]
                         )
                     )))
-                }
-                CodeBlockItemSyntax(item: .stmt(StmtSyntax(ReturnStmtSyntax(expression: FunctionCallExprSyntax(
-                    calledExpression: DeclReferenceExprSyntax(baseName: .identifier("Row")),
-                    leftParen: .leftParenToken(),
-                    rightParen: .rightParenToken(),
-                    argumentsBuilder: {
-                        for (column, _, alias) in columns {
-                            LabeledExprSyntax(
-                                label: alias ?? column,
-                                expression: DeclReferenceExprSyntax(baseName: .identifier(alias ?? column))
-                            )
+                    CodeBlockItemSyntax(item: .stmt(StmtSyntax(ReturnStmtSyntax(expression: FunctionCallExprSyntax(
+                        calledExpression: DeclReferenceExprSyntax(baseName: .identifier("Row")),
+                        leftParen: .leftParenToken(),
+                        rightParen: .rightParenToken(),
+                        argumentsBuilder: {
+                            for (column, _, alias) in columns {
+                                LabeledExprSyntax(
+                                    label: alias ?? column,
+                                    expression: DeclReferenceExprSyntax(baseName: .identifier(alias ?? column))
+                                )
+                            }
                         }
-                    }
-                )))))
+                    )))))
+                }
             })
         )
     }

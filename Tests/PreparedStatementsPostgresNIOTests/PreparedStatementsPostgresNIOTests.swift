@@ -109,8 +109,7 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
             expandedSource: """
             struct MyStatement {
             
-                struct Row {
-                }
+                typealias Row = Void
             
                 static let sql = "INSERT INTO users (id, name, age) VALUES ($1, $2, $3)"
             
@@ -129,7 +128,6 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                    return Row()
                 }
             }
             
@@ -195,8 +193,7 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
             expandedSource: """
             struct MyStatement {
             
-                struct Row {
-                }
+                typealias Row = Void
             
                 static let sql = "SELECT id, name, age FROM users"
             
@@ -205,7 +202,6 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                    return Row()
                 }
             }
             
@@ -229,8 +225,7 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
             expandedSource: """
             struct MyStatement {
             
-                struct Row {
-                }
+                typealias Row = Void
             
                 static let sql = ""
             
@@ -239,13 +234,34 @@ final class PreparedStatementsPostgresNIOTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                    return Row()
                 }
             }
             
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
+
+    func testMacroOnClassDoesNotWork() throws {
+        #if canImport(PreparedStatementsPostgresNIOMacros)
+        assertMacroExpansion(
+            #"@Statement("")  class MyStatement {}"#,
+            expandedSource: "class MyStatement {}",
+            diagnostics: [
+                DiagnosticSpec(
+                    message: "'@Statement' can only be applied to struct types",
+                    line: 1,
+                    column: 1,
+                    fixIts: [
+                        FixItSpec(message: "Replace 'class' with 'struct'")
+                    ]
+                )
+            ],
             macroSpecs: testMacros
         )
         #else

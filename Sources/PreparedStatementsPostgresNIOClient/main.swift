@@ -28,7 +28,11 @@ struct MyPreparedStatementOldWay: PostgresPreparedStatement {
     }
 }
 
-@Statement("")
+func myThing() {
+
+}
+
+@Statement("SELECT *")
 struct MyOtherPreparedStatement {}
 
 @available(macOS 14.0, *)
