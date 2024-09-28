@@ -20,8 +20,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0-latest"),
+        .package(url: "https://github.com/vapor/postgres-nio", from: "1.0.0"),
     ],
     targets: [
+        .target(name: "Utility", dependencies: [.product(name: "PostgresNIO", package: "postgres-nio")]),
+        
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         // Macro implementation that performs the source transformation of a macro.
@@ -29,12 +32,13 @@ let package = Package(
             name: "PreparedStatementsPostgresNIOMacros",
             dependencies: [
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                "Utility"
             ]
         ),
 
         // Library that exposes a macro as part of its API, which is used in client programs.
-        .target(name: "PreparedStatementsPostgresNIO", dependencies: ["PreparedStatementsPostgresNIOMacros"]),
+        .target(name: "PreparedStatementsPostgresNIO", dependencies: ["PreparedStatementsPostgresNIOMacros", .product(name: "PostgresNIO", package: "postgres-nio"), "Utility"]),
 
         // A client of the library, which is able to use the macro in its own code.
         .executableTarget(name: "PreparedStatementsPostgresNIOClient", dependencies: ["PreparedStatementsPostgresNIO"]),

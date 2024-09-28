@@ -1,8 +1,33 @@
 import PreparedStatementsPostgresNIO
+import PostgresNIO
+import Foundation
 
-let a = 17
-let b = 25
+@Statement("SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self) FROM users WHERE \(bind: "age", Int.self) > age")
+struct MyPreparedStatement {}
 
-let (result, code) = #stringify(a + b)
+struct MyPreparedStatementOldWay: PostgresPreparedStatement {
+    func decodeRow(_ row: PostgresRow) throws -> Row {
+        let (v1, v2, v3) = try row.decode((UUID, String, Int).self)
+        return Row(id: v1, name: v2, age: v3)
+    }
+    
+    struct Row {
+        let id: UUID
+        let name: String
+        let age: Int
+    }
 
-print("The value \(result) was produced by the code \"\(code)\"")
+    static let sql: String = ""
+
+    let age: Int
+
+    func makeBindings() throws -> PostgresBindings {
+        var bindings = PostgresBindings(capacity: 1)
+        bindings.append(age)
+        return bindings
+    }
+}
+
+@available(macOS 14.0, *)
+@Observable
+final class MyObservable {}
