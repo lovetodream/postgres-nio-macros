@@ -72,7 +72,16 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         guard declaration.is(StructDeclSyntax.self) else {
             return []
         }
+        #if canImport(SwiftSyntax600)
         let protocols = protocols.map { InheritedTypeSyntax(type: $0) }
+        #else
+        let protocols = if protocols.isEmpty {
+            // In tests, the protocol is not added before 600, so we'll add it manually
+            [InheritedTypeSyntax(type: TypeSyntax(stringLiteral: "PostgresPreparedStatement"))]
+        } else {
+            protocols.map { InheritedTypeSyntax(type: $0) }
+        }
+        #endif
         return [
             ExtensionDeclSyntax(
                 extendedType: type,
@@ -84,6 +93,7 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
 
     public static func expansion(of node: AttributeSyntax, providingMembersOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
         guard declaration.is(StructDeclSyntax.self) else {
+            #if canImport(SwiftSyntax600)
             context.diagnose(Diagnostic(
                 node: node,
                 message: StatementMacroDiagnosticMessages.invalidDeclaration,
@@ -94,6 +104,13 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
                     )
                 ])
             ))
+            #else
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: StatementMacroDiagnosticMessages.invalidDeclaration
+                ))
+            #endif
             return []
         }
 
@@ -182,6 +199,11 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         let identifier = iterator.next()! as LabeledExprSyntax // works as tuple contains at least two elements
         // Type can be force-unwrapped as the compiler ensures it is there.
         let rawType = iterator.next()!.expression.as(MemberAccessExprSyntax.self)!.base!
+        #if canImport(SwiftSyntax600)
+        let label = identifier.label?.identifier?.name
+        #else
+        let label = identifier.label?.text
+        #endif
         let type: TokenSyntax
         let isOptional: Bool
         if let nonOptional = rawType.as(DeclReferenceExprSyntax.self)?.baseName {
@@ -196,13 +218,13 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
             throw StatementMacroError.unprocessableInterpolation(
                 name: identifier.expression.as(StringLiteralExprSyntax.self)?.segments.first?.as(
                     StringSegmentSyntax.self)?.content.text ?? "<invalid>",
-                isBind: identifier.label?.identifier?.name == "bind"
+                isBind: label == "bind"
             )
         }
         // Same thing as with type.
         let name = identifier.expression.as(StringLiteralExprSyntax.self)!
             .segments.first!.as(StringSegmentSyntax.self)!.content.text
-        switch identifier.label?.identifier?.name {
+        switch label {
         case "bind":
             return .bind((name: name, type: type, isOptional: isOptional))
         default:
@@ -241,11 +263,7 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
     private static func makeBindings(for binds: [Bind]) -> FunctionDeclSyntax {
         FunctionDeclSyntax(
             name: .identifier("makeBindings"),
-            signature: FunctionSignatureSyntax(
-                parameterClause: .init(parameters: []),
-                effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))),
-                returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "PostgresBindings"))
-            ),
+            signature: bindingsFunctionSignature(),
             body: CodeBlockSyntax(statementsBuilder: {
                 CodeBlockItemSyntax(
                     item: .decl(DeclSyntax(
@@ -293,11 +311,7 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
     private static func makeEmptyBindings() -> FunctionDeclSyntax {
         FunctionDeclSyntax(
             name: .identifier("makeBindings"),
-            signature: FunctionSignatureSyntax(
-                parameterClause: .init(parameters: []),
-                effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))),
-                returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "PostgresBindings"))
-            ),
+            signature: bindingsFunctionSignature(),
             body: CodeBlockSyntax(statementsBuilder: {
                 CodeBlockItemSyntax(
                     item: .stmt(StmtSyntax(
@@ -313,22 +327,27 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         )
     }
 
+    private static func bindingsFunctionSignature() -> FunctionSignatureSyntax {
+        #if canImport(SwiftSyntax600)
+        FunctionSignatureSyntax(
+            parameterClause: .init(parameters: []),
+            effectSpecifiers: FunctionEffectSpecifiersSyntax(
+                throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))),
+            returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "PostgresBindings"))
+        )
+        #else
+        FunctionSignatureSyntax(
+            parameterClause: .init(parameters: []),
+            effectSpecifiers: FunctionEffectSpecifiersSyntax(throwsSpecifier: .keyword(.throws)),
+            returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "PostgresBindings"))
+        )
+        #endif
+    }
+
     private static func decodeRow(from columns: [Column]) -> FunctionDeclSyntax {
-        FunctionDeclSyntax(
+        return FunctionDeclSyntax(
             name: .identifier("decodeRow"),
-            signature: FunctionSignatureSyntax(
-                parameterClause: .init(parameters: [
-                    FunctionParameterSyntax(
-                        firstName: .wildcardToken(),
-                        secondName: .identifier("row"),
-                        type: TypeSyntax(stringLiteral: "PostgresRow")
-                    )
-                ]),
-                effectSpecifiers: FunctionEffectSpecifiersSyntax(
-                    throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))
-                ),
-                returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "Row"))
-            ),
+            signature: decodeRowFunctionSignature(),
             body: CodeBlockSyntax(statementsBuilder: {
                 if !columns.isEmpty {
                     CodeBlockItemSyntax(item: .decl(DeclSyntax(
@@ -383,6 +402,38 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
                 }
             })
         )
+    }
+
+    private static func decodeRowFunctionSignature() -> FunctionSignatureSyntax {
+        #if canImport(SwiftSyntax600)
+        FunctionSignatureSyntax(
+            parameterClause: .init(parameters: [
+                FunctionParameterSyntax(
+                    firstName: .wildcardToken(),
+                    secondName: .identifier("row"),
+                    type: TypeSyntax(stringLiteral: "PostgresRow")
+                )
+            ]),
+            effectSpecifiers: FunctionEffectSpecifiersSyntax(
+                throwsClause: ThrowsClauseSyntax(throwsSpecifier: .keyword(.throws))
+            ),
+            returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "Row"))
+        )
+        #else
+        FunctionSignatureSyntax(
+            parameterClause: .init(parameters: [
+                FunctionParameterSyntax(
+                    firstName: .wildcardToken(),
+                    secondName: .identifier("row"),
+                    type: TypeSyntax(stringLiteral: "PostgresRow")
+                )
+            ]),
+            effectSpecifiers: FunctionEffectSpecifiersSyntax(
+                throwsSpecifier: .keyword(.throws)
+            ),
+            returnClause: ReturnClauseSyntax(type: TypeSyntax(stringLiteral: "Row"))
+        )
+        #endif
     }
 
     private static func makeTypeExpressionSyntax(for type: TokenSyntax, optional: Bool) -> LabeledExprSyntax {

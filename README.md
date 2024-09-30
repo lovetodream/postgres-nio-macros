@@ -36,7 +36,7 @@ struct UsersStatement {
         var age: Int
     }
 
-    static let sql = "SELECT id, name, age FROM users WHERE :1 < age"
+    static let sql = "SELECT id, name, age FROM users WHERE $1 < age"
     
     var age: Int
 
