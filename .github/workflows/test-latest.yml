@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     container:
-      image: swift:latest-jammy
+      image: swift:jammy
     services:
       postgres:
         image: postgres

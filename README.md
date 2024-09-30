@@ -1,10 +1,12 @@
 # PostgresNIOMacros
 
+[![codecov](https://codecov.io/gh/lovetodream/postgres-nio-macros/graph/badge.svg?token=PLWUKYV0HO)](https://codecov.io/gh/lovetodream/postgres-nio-macros)
+
 Macros for [PostgresNIO](https://github.com/vapor/postgres-nio).
 
-## `@Statement(_:)`
+## `@Statement(_:)`[^1]
 
-<small>This macro was initially pitched to me by @fabianfett.</small>
+[^1]: This macro was initially pitched to me by [@fabianfett](https://github.com/fabianfett).
  
 Creates a `PostgresPreparedStatement` from a decorated query string.
  
