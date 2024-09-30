@@ -1,0 +1,48 @@
+name: Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    container:
+      image: swift:latest-jammy
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set DEBUG specific environment variables
+      if: runner.debug == '1'
+      run: |
+        echo "LOG_LEVEL=trace" >> "$GITHUB_ENV"
+    - name: Build
+      run: swift build
+    - name: Run tests
+      run: swift test --enable-code-coverage
+      env:
+        PSQL_HOST: postgres
+        PSQL_PORT: 5432
+        PSQL_USER: postgres
+        PSQL_PASSWORD: postgres
+        PSQL_DATABASE: postgres
+    - name: Prepare Code Coverage
+      run: llvm-cov export -format="lcov" .build/debug/postgres-nio-macrosPackageTests.xctest -instr-profile .build/debug/codecov/default.profdata > info.lcov
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: info.lcov

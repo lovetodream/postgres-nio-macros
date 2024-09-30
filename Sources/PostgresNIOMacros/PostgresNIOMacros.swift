@@ -1,10 +1,3 @@
-//
-//  File.swift
-//  PreparedStatementsPostgresNIO
-//
-//  Created by Timo Zacherl on 26.09.24.
-//
-
 import PostgresNIO
 
 /// A parsable String literal for the `@Statement` macro. It doesn't store anything and is completely useless outside of the `@Statement` declaration.
@@ -13,7 +6,7 @@ import PostgresNIO
 /// @Statement("SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self) FROM users")
 /// struct UsersStatement {}
 /// ```
-public struct _PostgresPreparedStatement: ExpressibleByStringInterpolation {
+public struct _PostgresPreparedStatementString: ExpressibleByStringInterpolation {
     public init(stringLiteral value: String) {}
 
     public init(stringInterpolation: StringInterpolation) {}
@@ -33,12 +26,12 @@ public struct _PostgresPreparedStatement: ExpressibleByStringInterpolation {
         ///
         /// ```swift
         ///"SELECT \("id", UUID.self) FROM users"
-        ///// SQL:   SELECT id FROM users
-        ///// Swift: struct Row { let id: UUID }
+        ///// -> SQL:   SELECT id FROM users
+        ///// -> Swift: struct Row { let id: UUID }
         ///
         ///"SELECT \("user_id", UUID.self, as: userID) FROM users"
-        ///// SQL: SELECT id as userID FROM users
-        ///// SWIFT: struct Row { let userID: UUID }
+        ///// -> SQL: SELECT id as userID FROM users
+        ///// -> SWIFT: struct Row { let userID: UUID }
         /// ```
         public mutating func appendInterpolation(
             _ name: String,
@@ -56,3 +49,15 @@ public struct _PostgresPreparedStatement: ExpressibleByStringInterpolation {
         ) {}
     }
 }
+
+/// Defines and implements conformance of the PostgresPreparedStatement protocol for Structs.
+///
+/// For example, the following code applies the `Statement` macro to the type `UsersStatement`:
+/// ```swift
+/// @Statement("SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self) FROM users WHERE \(bind: "age", Int.self) < age")
+/// struct UsersStatement {}
+/// ```
+@attached(member, names: arbitrary)
+@attached(extension, conformances: PostgresPreparedStatement)
+public macro Statement(_ statement: _PostgresPreparedStatementString) =
+    #externalMacro(module: "PostgresNIOMacrosPlugin", type: "StatementMacro")
