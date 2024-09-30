@@ -6,7 +6,7 @@ import PostgresNIO
 /// @Statement("SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self) FROM users")
 /// struct UsersStatement {}
 /// ```
-public struct _PostgresPreparedStatementString: ExpressibleByStringInterpolation {
+public struct _PostgresPreparedStatementString: ExpressibleByStringInterpolation, Sendable {
     public init(stringLiteral value: String) {}
 
     public init(stringInterpolation: StringInterpolation) {}
