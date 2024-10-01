@@ -115,29 +115,29 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         }
 
         // It is fine to force unwrap here, because the compiler ensures we receive this exact syntax tree here.
-        let elements = node
+        let unparsedString = node
             .arguments!.as(LabeledExprListSyntax.self)!
-            .first!.expression.as(StringLiteralExprSyntax.self)!.segments
+            .first!.expression.as(StringLiteralExprSyntax.self)!
 
-        var sql = ""
+        var sql: StringLiteralSegmentListSyntax = []
         var columns: [Column] = []
         var binds: [Bind] = []
-        for element in elements {
+        for element in unparsedString.segments {
             if let expression = element.as(ExpressionSegmentSyntax.self) {
                 let interpolation = try extractInterpolations(expression)
                 switch interpolation {
                 case .column(let column):
                     columns.append(column)
-                    sql.append(column.name)
+                    sql.append(.init(StringSegmentSyntax(content: .stringSegment(column.name))))
                     if let alias = column.alias {
-                        sql.append(" AS \(alias)")
+                        sql.append(.init(StringSegmentSyntax(content: .stringSegment(" AS \(alias)"))))
                     }
                 case .bind(let bind):
                     binds.append(bind)
-                    sql.append("$\(binds.count)")
+                    sql.append(.init(StringSegmentSyntax(content: .stringSegment("$\(binds.count)"))))
                 }
             } else if let expression = element.as(StringSegmentSyntax.self) {
-                sql.append(expression.content.text)
+                sql.append(.init(expression))
             }
         }
 
@@ -156,7 +156,13 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         ) {
             PatternBindingSyntax(
                 pattern: IdentifierPatternSyntax(identifier: .identifier("sql")),
-                initializer: InitializerClauseSyntax(value: StringLiteralExprSyntax(content: sql))
+                initializer: InitializerClauseSyntax(
+                    value: StringLiteralExprSyntax(
+                        openingQuote: unparsedString.openingQuote,
+                        segments: sql,
+                        closingQuote: unparsedString.closingQuote
+                    )
+                )
             )
         }
 

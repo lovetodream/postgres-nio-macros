@@ -382,6 +382,55 @@ final class StatementMacroTests: XCTestCase {
         throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
+
+    func testMultilineMacro() throws {
+        #if canImport(PostgresNIOMacrosPlugin)
+        assertMacroExpansion(
+            #"""
+            @Statement("""
+            SELECT \("id", UUID.self), \("name", String.self), \("age", Int.self)
+            FROM users
+            WHERE \(bind: "age", Int.self) > age
+            """)
+            struct MyStatement {}
+            """#,
+            expandedSource: #"""
+            struct MyStatement {
+            
+                struct Row {
+                    var id: UUID
+                    var name: String
+                    var age: Int
+                }
+            
+                static let sql = """
+                SELECT id, name, age
+                FROM users
+                WHERE $1 > age
+                """
+
+                var age: Int
+            
+                func makeBindings() throws -> PostgresBindings {
+                    var bindings = PostgresBindings(capacity: 1)
+                    bindings.append(age)
+                    return bindings
+                }
+            
+                func decodeRow(_ row: PostgresRow) throws -> Row {
+                    let (id, name, age) = try row.decode((UUID, String, Int).self)
+                    return Row(id: id, name: name, age: age)
+                }\#(trailingNewline)}
+            
+            extension MyStatement: PostgresPreparedStatement {
+            }
+            """#,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
 }
 
 
