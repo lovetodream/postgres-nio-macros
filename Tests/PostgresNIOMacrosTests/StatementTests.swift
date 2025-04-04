@@ -55,8 +55,7 @@ final class StatementTests {
             #expect(stream3Count == 1)
             let stream4 = try await connection.execute(SimpleSelectWithOptionalWhereClause(minCount: nil), logger: logger)
             var stream4Count = 0
-            for try await row in stream4 {
-                #expect(row.count == nil)
+            for try await _ in stream4 {
                 stream4Count += 1
             }
             #expect(stream4Count == 0)
