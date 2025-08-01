@@ -91,6 +91,15 @@ public struct StatementMacro: ExtensionMacro, MemberMacro {
         ]
     }
 
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingMembersOf declaration: some DeclGroupSyntax,
+        conformingTo protocols: [TypeSyntax],
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        try self.expansion(of: node, providingMembersOf: declaration, in: context)
+    }
+
     public static func expansion(of node: AttributeSyntax, providingMembersOf declaration: some DeclGroupSyntax, in context: some MacroExpansionContext) throws -> [DeclSyntax] {
         guard declaration.is(StructDeclSyntax.self) else {
             #if canImport(SwiftSyntax600)
