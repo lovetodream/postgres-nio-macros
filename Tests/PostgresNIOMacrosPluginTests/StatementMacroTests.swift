@@ -9,23 +9,12 @@ import XCTest
 #if canImport(PostgresNIOMacrosPlugin)
 import PostgresNIOMacrosPlugin
 
-#if canImport(SwiftSyntax600)
 let testMacros: [String: MacroSpec] = [
     "Statement": MacroSpec(type: StatementMacro.self, conformances: ["PostgresPreparedStatement"]),
 ]
-#else
-let testMacros: [String: Macro.Type] = [
-    "Statement": StatementMacro.self,
-]
-#endif
 #endif
 
 final class StatementMacroTests: XCTestCase {
-    #if canImport(SwiftSyntax600)
-    let trailingNewline = "\n"
-    #else
-    let trailingNewline = ""
-    #endif
 
     func testMacro() throws {
         #if canImport(PostgresNIOMacrosPlugin)
@@ -56,7 +45,8 @@ final class StatementMacroTests: XCTestCase {
                 func decodeRow(_ row: PostgresRow) throws -> Row {
                     let (id, name, age) = try row.decode((UUID, String, Int).self)
                     return Row(id: id, name: name, age: age)
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -93,7 +83,8 @@ final class StatementMacroTests: XCTestCase {
                 func decodeRow(_ row: PostgresRow) throws -> Row {
                     let (id, name, age) = try row.decode((UUID, String, Int).self)
                     return Row(id: id, name: name, age: age)
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -134,7 +125,8 @@ final class StatementMacroTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -175,7 +167,8 @@ final class StatementMacroTests: XCTestCase {
                 func decodeRow(_ row: PostgresRow) throws -> Row {
                     let (userID, name, age) = try row.decode((UUID, String, Int).self)
                     return Row(userID: userID, name: name, age: age)
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -206,7 +199,8 @@ final class StatementMacroTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -237,7 +231,8 @@ final class StatementMacroTests: XCTestCase {
                 }
             
                 func decodeRow(_ row: PostgresRow) throws -> Row {
-                }\(trailingNewline)}
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
@@ -251,11 +246,7 @@ final class StatementMacroTests: XCTestCase {
 
     func testMacroOnClassDoesNotWork() throws {
         #if canImport(PostgresNIOMacrosPlugin)
-        #if canImport(SwiftSyntax600)
         let fixIts = [FixItSpec(message: "Replace 'class' with 'struct'")]
-        #else
-        let fixIts: [FixItSpec] = []
-        #endif
         assertMacroExpansion(
             #"@Statement("")  class MyStatement {}"#,
             expandedSource: "class MyStatement {}",
@@ -307,7 +298,8 @@ final class StatementMacroTests: XCTestCase {
                     func decodeRow(_ row: PostgresRow) throws -> Row {
                         let (id, name, age) = try row.decode((UUID, String, Int).self)
                         return Row(id: id, name: name, age: age)
-                    }\(trailingNewline)}
+                    }
+                }
                 
                 extension MyStatement: PostgresPreparedStatement {
                 }
@@ -352,7 +344,8 @@ final class StatementMacroTests: XCTestCase {
                     func decodeRow(_ row: PostgresRow) throws -> Row {
                         let (id, name, age) = try row.decode((UUID?, String, Int).self)
                         return Row(id: id, name: name, age: age)
-                    }\(trailingNewline)}
+                    }
+                }
                 
                 extension MyStatement: PostgresPreparedStatement {
                 }
@@ -428,7 +421,64 @@ final class StatementMacroTests: XCTestCase {
                 func decodeRow(_ row: PostgresRow) throws -> Row {
                     let (id, name, age) = try row.decode((UUID, String, Int).self)
                     return Row(id: id, name: name, age: age)
-                }\#(trailingNewline)}
+                }
+            }
+            
+            extension MyStatement: PostgresPreparedStatement {
+            }
+            """#,
+            macroSpecs: testMacros
+        )
+        #else
+        throw XCTSkip("macros are only supported when running tests for the host platform")
+        #endif
+    }
+
+    func testEncodableArrayMacro() throws {
+        #if canImport(PostgresNIOMacrosPlugin)
+        assertMacroExpansion(
+            #"""
+            @Statement("""
+            SELECT \("names", [String].self), \("memberOf", [Int]?.self)
+            WHERE names = \(bind: "names", [String].self) OR memberOf = \(bind: "memberOf", [Int]?.self)
+            FROM groups
+            """)
+            struct MyStatement {}
+            """#,
+            expandedSource: #"""
+            struct MyStatement {
+            
+                struct Row {
+                    var names: [String]
+                    var memberOf: [Int]?
+                }
+            
+                static let sql = """
+                SELECT names, memberOf
+                WHERE names = $1 OR memberOf = $2
+                FROM groups
+                """
+            
+                var names: [String]
+            
+                var memberOf: [Int]?
+            
+                func makeBindings() throws -> PostgresBindings {
+                    var bindings = PostgresBindings(capacity: 2)
+                    bindings.append(names)
+                    if let memberOf {
+                        bindings.append(memberOf)
+                    } else {
+                        bindings.appendNull()
+                    }
+                    return bindings
+                }
+            
+                func decodeRow(_ row: PostgresRow) throws -> Row {
+                    let (names, memberOf) = try row.decode(([String], [Int]?).self)
+                    return Row(names: names, memberOf: memberOf)
+                }
+            }
             
             extension MyStatement: PostgresPreparedStatement {
             }
