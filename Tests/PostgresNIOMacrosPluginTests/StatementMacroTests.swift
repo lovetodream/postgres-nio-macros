@@ -2,8 +2,8 @@ import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
 import SwiftSyntaxMacroExpansion
-import SwiftSyntaxMacrosTestSupport
-import XCTest
+import SwiftSyntaxMacrosGenericTestSupport
+import Testing
 
 // Macro implementations build for the host, so the corresponding module is not available when cross-compiling. Cross-compiled tests may still make use of the macro itself in end-to-end tests.
 #if canImport(PostgresNIOMacrosPlugin)
@@ -12,11 +12,16 @@ import PostgresNIOMacrosPlugin
 let testMacros: [String: MacroSpec] = [
     "Statement": MacroSpec(type: StatementMacro.self, conformances: ["PostgresPreparedStatement"]),
 ]
+
+let macrosAvailable = true
+#else
+let macrosAvailable = false
 #endif
 
-final class StatementMacroTests: XCTestCase {
+@Suite(.enabled(if: macrosAvailable, "macros are only supported when running tests for the host platform"))
+struct StatementMacroTests {
 
-    func testMacro() throws {
+    @Test func macro() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -51,14 +56,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithoutBinds() throws {
+    @Test func macroWithoutBinds() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -89,14 +103,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroOnInsertStatement() throws {
+    @Test func macroOnInsertStatement() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -131,14 +154,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithAliasInColumn() throws {
+    @Test func macroWithAliasInColumn() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -173,14 +205,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithoutAnything() throws {
+    @Test func macroWithoutAnything() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -205,14 +246,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithEmptyString() throws {
+    @Test func macroWithEmptyString() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -237,14 +287,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroOnClassDoesNotWork() throws {
+    @Test func macroOnClassDoesNotWork() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         let fixIts = [FixItSpec(message: "Replace 'class' with 'struct'")]
         assertMacroExpansion(
@@ -258,14 +317,23 @@ final class StatementMacroTests: XCTestCase {
                     fixIts: fixIts
                 )
             ],
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithOptionalBind() throws {
+    @Test func macroWithOptionalBind() throws {
         #if canImport(PostgresNIOMacros)
         assertMacroExpansion(
             #"""
@@ -304,14 +372,23 @@ final class StatementMacroTests: XCTestCase {
                 extension MyStatement: PostgresPreparedStatement {
                 }
                 """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithOptionalColumn() throws {
+    @Test func macroWithOptionalColumn() throws {
         #if canImport(PostgresNIOMacros)
         assertMacroExpansion(
             #"""
@@ -350,14 +427,23 @@ final class StatementMacroTests: XCTestCase {
                 extension MyStatement: PostgresPreparedStatement {
                 }
                 """,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMacroWithWithInvalidTypeDoesNotWork() throws {
+    @Test func macroWithWithInvalidTypeDoesNotWork() throws {
         #if canImport(PostgresNIOMacros)
         assertMacroExpansion(
             #"""
@@ -377,14 +463,23 @@ final class StatementMacroTests: XCTestCase {
                     column: 1
                 )
             ],
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testMultilineMacro() throws {
+    @Test func multilineMacro() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -427,14 +522,23 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """#,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 
-    func testEncodableArrayMacro() throws {
+    @Test func encodableArrayMacro() throws {
         #if canImport(PostgresNIOMacrosPlugin)
         assertMacroExpansion(
             #"""
@@ -483,37 +587,19 @@ final class StatementMacroTests: XCTestCase {
             extension MyStatement: PostgresPreparedStatement {
             }
             """#,
-            macroSpecs: testMacros
+            macroSpecs: testMacros,
+            failureHandler: {
+                Issue.record(
+                    "\($0.message)",
+                    sourceLocation: .init(
+                        fileID: $0.location.fileID,
+                        filePath: $0.location.filePath,
+                        line: $0.location.line,
+                        column: $0.location.column
+                    )
+                )
+            }
         )
-        #else
-        throw XCTSkip("macros are only supported when running tests for the host platform")
         #endif
     }
 }
-
-
-#if !canImport(SwiftSyntax600)
-func assertMacroExpansion(
-    _ originalSource: String,
-    expandedSource expectedExpandedSource: String,
-    diagnostics: [DiagnosticSpec] = [],
-    macroSpecs: [String: Macro.Type],
-    testModuleName: String = "TestModule",
-    testFileName: String = "test.swift",
-    indentationWidth: Trivia = .spaces(4),
-    file: StaticString = #file,
-    line: UInt = #line
-) {
-    assertMacroExpansion(
-        originalSource,
-        expandedSource: expectedExpandedSource,
-        diagnostics: diagnostics,
-        macros: macroSpecs,
-        testModuleName: testModuleName,
-        testFileName: testFileName,
-        indentationWidth: indentationWidth,
-        file: file,
-        line: line
-    )
-}
-#endif
