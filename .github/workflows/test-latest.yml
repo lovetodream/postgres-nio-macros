@@ -45,8 +45,8 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: .build
-        key: "swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
-        restore-keys: "swiftpm-tests-build-${{ runner.os }}-"
+        key: "${{ matrix.swift-image }}-swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
+        restore-keys: "${{ matrix.swift-image }}-swiftpm-tests-build-${{ runner.os }}-"
     - name: Build
       run: swift build --build-tests --enable-code-coverage
     - name: Cache .build
@@ -54,7 +54,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: .build
-        key: "swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
+        key: "${{ matrix.swift-image }}-swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
     - name: Run tests
       run: swift test --skip-build --enable-code-coverage
       env:
