@@ -64,10 +64,11 @@ jobs:
         PSQL_PASSWORD: postgres
         PSQL_DATABASE: postgres
     - name: Prepare Code Coverage
-      run: llvm-cov export -format="lcov" \
-        .build/debug/postgres-nio-macrosPackageTests.xctest  \
-        -ignore-filename-regex="\/Tests\/" \
-        -instr-profile .build/debug/codecov/default.profdata > info.lcov
+      run: |
+        llvm-cov export -format="lcov" \
+          .build/debug/postgres-nio-macrosPackageTests.xctest  \
+          -ignore-filename-regex="\/Tests\/" \
+          -instr-profile .build/debug/codecov/default.profdata > info.lcov
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
       with:
