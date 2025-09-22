@@ -61,6 +61,24 @@ final class StatementTests {
             #expect(stream4Count == 0)
         }
     }
+
+    @Test
+    func arraySelects() async throws {
+        do {
+            try await self.client.withConnection { connection in
+                let stream1 = try await connection.execute(ArraySelect(exact: ["1"]), logger: logger)
+                var stream1Count = 0
+                for try await row in stream1 {
+                    #expect(row.value == ["1", "2", "3", "4"])
+                    stream1Count += 1
+                }
+                #expect(stream1Count == 1)
+            }
+        } catch {
+            print(String(reflecting: error))
+            throw error
+        }
+    }
 }
 
 @Statement("SELECT \("1", Int.self, as: "count")")
@@ -74,6 +92,12 @@ private struct SimpleNullSelect {}
 
 @Statement("SELECT \("1", Int.self, as: "count") WHERE \(bind: "minCount", Int?.self) != 0")
 private struct SimpleSelectWithOptionalWhereClause {}
+
+@Statement("""
+SELECT \("string_to_array('1,2,3,4', ',')", [String].self, as: "value") 
+WHERE \(bind: "exact", [String].self) = string_to_array('1', '') 
+""")
+private struct ArraySelect {}
 
 func env(_ name: String) -> String? {
     getenv(name).flatMap { String(cString: $0) }

@@ -8,8 +8,15 @@ on:
 
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        swift-image:
+          - swift:6.0-jammy
+          - swift:6.1-noble
+          - swift:6.2-noble
     container:
-      image: swift:jammy
+      image:  ${{ matrix.swift-image }}
     services:
       postgres:
         image: postgres
@@ -29,10 +36,27 @@ jobs:
       if: runner.debug == '1'
       run: |
         echo "LOG_LEVEL=trace" >> "$GITHUB_ENV"
+    - name: Install zstd
+      run: |
+        apt-get update -y
+        apt-get install -y zstd
+    - name: Restore .build
+      id: "restore-build"
+      uses: actions/cache/restore@v4
+      with:
+        path: .build
+        key: "swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
+        restore-keys: "swiftpm-tests-build-${{ runner.os }}-"
     - name: Build
-      run: swift build
+      run: swift build --build-tests --enable-code-coverage
+    - name: Cache .build
+      if: steps.restore-build.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: .build
+        key: "swiftpm-tests-build-${{ runner.os }}-${{ github.event.pull_request.base.sha || github.event.after }}"
     - name: Run tests
-      run: swift test --enable-code-coverage
+      run: swift test --skip-build --enable-code-coverage
       env:
         PSQL_HOST: postgres
         PSQL_PORT: 5432
