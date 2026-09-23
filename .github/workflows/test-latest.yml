@@ -65,13 +65,35 @@ jobs:
         PSQL_DATABASE: postgres
     - name: Prepare Code Coverage
       run: |
-        BIN_PATH=$(swift build --build-tests --show-bin-path)
+        BIN_PATH="$(swift build --build-tests --show-bin-path)"
         
-        XCTEST_PATH=$(find "$BIN_PATH" -name 'postgres-nio-macrosPackageTests.xctest' | head -n 1)
-        PROFDATA_PATH=$(find .build -name 'default.profdata' | head -n 1)
+        PROFDATA_PATH="$(dirname "$(swift test --show-codecov-path)")/default.profdata"
+        
+        COV_ARGS=()
+        
+        if [[ -d "${BIN_PATH}/postgres-nio-macrosPackageTests.xctest" ]]; then
+          COV_ARGS+=("--object=${BIN_PATH}/postgres-nio-macrosPackageTests.xctest/Contents/macOS/postgres-nio-macrosPackageTests")
+        
+        elif [[ -x "${BIN_PATH}/postgres-nio-macrosPackageTests.xctest" ]]; then
+          COV_ARGS+=("--object=${BIN_PATH}/postgres-nio-macrosPackageTests.xctest")
+        
+        else
+          for obj in "${BIN_PATH}/"*"-test-runner"; do
+            if [[ -f "$obj" ]]; then
+              SHARED_LIB="${obj/-test-runner/.so}"
+              COV_ARGS+=("--object=${SHARED_LIB}")
+            fi
+          done
+        fi
+        
+        if [ ${#COV_ARGS[@]} -eq 0 ]; then
+          echo "No coverage binaries found in $BIN_PATH:"
+          ls -la "$BIN_PATH"
+          exit 1
+        fi
         
         llvm-cov export -format="lcov" \
-          "$XCTEST_PATH" \
+          "${COV_ARGS[@]}" \
           -ignore-filename-regex="\/Tests\/" \
           -instr-profile "$PROFDATA_PATH" > info.lcov
     - name: Upload coverage reports to Codecov
