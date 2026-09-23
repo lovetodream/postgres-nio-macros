@@ -65,10 +65,15 @@ jobs:
         PSQL_DATABASE: postgres
     - name: Prepare Code Coverage
       run: |
+        BIN_PATH=$(swift build --build-tests --show-bin-path)
+        
+        XCTEST_PATH=$(find "$BIN_PATH" -name 'postgres-nio-macrosPackageTests.xctest' | head -n 1)
+        PROFDATA_PATH=$(find .build -name 'default.profdata' | head -n 1)
+        
         llvm-cov export -format="lcov" \
-          .build/debug/postgres-nio-macrosPackageTests.xctest  \
+          "$XCTEST_PATH" \
           -ignore-filename-regex="\/Tests\/" \
-          -instr-profile .build/debug/codecov/default.profdata > info.lcov
+          -instr-profile "$PROFDATA_PATH" > info.lcov
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v3
       with:
