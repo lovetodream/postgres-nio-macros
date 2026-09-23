@@ -64,6 +64,7 @@ jobs:
         PSQL_PASSWORD: postgres
         PSQL_DATABASE: postgres
     - name: Prepare Code Coverage
+      shell: bash
       run: |
         BIN_PATH="$(swift build --build-tests --show-bin-path)"
         
